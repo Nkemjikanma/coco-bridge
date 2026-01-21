@@ -7,6 +7,7 @@
  * @module index
  */
 
+import { Hono } from "hono";
 import {
   type Bot,
   type CocoBridgeBotOptions,
@@ -99,7 +100,7 @@ function log(
 // Bot Instance (for external access)
 // ============================================================================
 
-let botInstance: Bot<typeof BOT_COMMANDS> | null = null;
+const botInstance: Bot<typeof BOT_COMMANDS> | null = null;
 
 /**
  * Get the current bot instance.
@@ -198,7 +199,7 @@ async function initializeRedis(): Promise<void> {
 /**
  * Initialize and start the Coco Bridge bot.
  */
-async function startBot(config: EnvConfig): Promise<Bot<typeof BOT_COMMANDS>> {
+async function startBot(config: EnvConfig) {
   log("info", "Creating Coco Bridge bot");
 
   const options: CocoBridgeBotOptions = {
@@ -211,15 +212,19 @@ async function startBot(config: EnvConfig): Promise<Bot<typeof BOT_COMMANDS>> {
 
   log("info", "Starting bot server", { port: config.port });
 
-  // Start the bot's Hono server
-  bot.start();
+  // Create Hono app and mount bot handlers
+  const app = bot.start();
+  app.get("/", (c) => c.text("Coco is up and running"));
+  app.get("/.well-known/agent-metadata.json", async (c) => {
+    return c.json(await bot.getIdentityMetadata());
+  });
 
   log("info", "Coco Bridge bot started successfully", {
     port: config.port,
     commands: BOT_COMMANDS.map((c) => `/${c.name}`),
   });
 
-  return bot;
+  return app;
 }
 
 // ============================================================================
@@ -248,7 +253,8 @@ async function main(): Promise<void> {
     await initializeRedis();
 
     // Start the bot
-    botInstance = await startBot(config);
+
+    await startBot(config);
 
     log("info", "Coco Bridge is running");
   } catch (error) {
