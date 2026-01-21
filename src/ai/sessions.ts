@@ -105,7 +105,7 @@ export async function createSession(
 
   const session = createSessionObject(sessionId, userId, threadId, initialMessage);
 
-  await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(session));
+  await redis.setEx(key, SESSION_TTL_SECONDS, JSON.stringify(session));
 
   return session;
 }
@@ -162,7 +162,7 @@ export async function updateSession(
     updatedAt: Date.now(),
   };
 
-  await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(updatedSession));
+  await redis.setEx(key, SESSION_TTL_SECONDS, JSON.stringify(updatedSession));
 
   return updatedSession;
 }

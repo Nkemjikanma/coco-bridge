@@ -5,9 +5,9 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "ts-node src/index.ts",
-    "start": "node dist/index.js",
+    "build": "tsc --noEmit",
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -27,11 +27,13 @@
     "@anthropic-ai/sdk": "^0.39.0",
     "@towns-protocol/bot": "^1.0.3",
     "ioredis": "^5.4.1",
+    "redis": "^5.10.0",
     "viem": "^2.21.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^1.6.1"
   },

@@ -1,4 +1,4 @@
-import { getRedisClient } from './redisClient';
+import { client } from "./redisClient";
 
 /**
  * Session Store for managing multi-turn conversations.
@@ -9,31 +9,36 @@ import { getRedisClient } from './redisClient';
 const SESSION_TTL_SECONDS = 30 * 60;
 
 /** Redis key prefix for sessions */
-const SESSION_KEY_PREFIX = 'coco-bridge:session:';
+const SESSION_KEY_PREFIX = "coco-bridge:session:";
 
 /** Session status types */
-export type SessionStatus = 'active' | 'pending_confirmation' | 'completed' | 'cancelled' | 'error';
+export type SessionStatus =
+  | "active"
+  | "pending_confirmation"
+  | "completed"
+  | "cancelled"
+  | "error";
 
 /** Pending action types for bridge operations */
 export type PendingActionType =
-  | 'bridge'
-  | 'swap_bridge'
-  | 'token_approval'
-  | 'balance_check'
-  | 'quote_request'
+  | "bridge"
+  | "swap_bridge"
+  | "token_approval"
+  | "balance_check"
+  | "quote_request"
   | null;
 
 /** Current action being executed */
 export type CurrentActionType =
-  | 'awaiting_signature'
-  | 'processing_transaction'
-  | 'checking_balance'
-  | 'getting_quote'
-  | 'idle'
+  | "awaiting_signature"
+  | "processing_transaction"
+  | "checking_balance"
+  | "getting_quote"
+  | "idle"
   | null;
 
 /** Message role in conversation */
-export type MessageRole = 'user' | 'assistant' | 'system';
+export type MessageRole = "user" | "assistant" | "system";
 
 /** Individual message in a session */
 export interface SessionMessage {
@@ -74,10 +79,9 @@ function getSessionKey(sessionId: string): string {
  * Returns null if session doesn't exist or has expired.
  */
 export async function getSession(sessionId: string): Promise<Session | null> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
 
-  const data = await redis.get(key);
+  const data = await client.get(key);
 
   if (!data) {
     return null;
@@ -87,7 +91,7 @@ export async function getSession(sessionId: string): Promise<Session | null> {
     const session = JSON.parse(data) as Session;
     return session;
   } catch {
-    console.error('[SessionStore] Failed to parse session data:', sessionId);
+    console.error("[SessionStore] Failed to parse session data:", sessionId);
     return null;
   }
 }
@@ -100,9 +104,8 @@ export async function createSession(
   sessionId: string,
   userId: string,
   threadId: string,
-  initialMessage?: SessionMessage
+  initialMessage?: SessionMessage,
 ): Promise<Session> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
   const now = Date.now();
 
@@ -112,13 +115,13 @@ export async function createSession(
     threadId,
     messages: initialMessage ? [initialMessage] : [],
     pendingAction: null,
-    currentAction: 'idle',
-    status: 'active',
+    currentAction: "idle",
+    status: "active",
     createdAt: now,
     updatedAt: now,
   };
 
-  await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(session));
+  await client.setEx(key, SESSION_TTL_SECONDS, JSON.stringify(session));
 
   return session;
 }
@@ -130,12 +133,11 @@ export async function createSession(
  */
 export async function updateSession(
   sessionId: string,
-  updates: Partial<Omit<Session, 'sessionId' | 'createdAt'>>
+  updates: Partial<Omit<Session, "sessionId" | "createdAt">>,
 ): Promise<Session | null> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
 
-  const existingData = await redis.get(key);
+  const existingData = await client.get(key);
 
   if (!existingData) {
     return null;
@@ -145,7 +147,10 @@ export async function updateSession(
   try {
     existingSession = JSON.parse(existingData) as Session;
   } catch {
-    console.error('[SessionStore] Failed to parse existing session:', sessionId);
+    console.error(
+      "[SessionStore] Failed to parse existing session:",
+      sessionId,
+    );
     return null;
   }
 
@@ -157,7 +162,7 @@ export async function updateSession(
     updatedAt: Date.now(),
   };
 
-  await redis.setex(key, SESSION_TTL_SECONDS, JSON.stringify(updatedSession));
+  await client.setEx(key, SESSION_TTL_SECONDS, JSON.stringify(updatedSession));
 
   return updatedSession;
 }
@@ -167,10 +172,9 @@ export async function updateSession(
  * Returns true if session was deleted, false if it didn't exist.
  */
 export async function deleteSession(sessionId: string): Promise<boolean> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
 
-  const result = await redis.del(key);
+  const result = await client.del(key);
 
   return result > 0;
 }
@@ -181,7 +185,7 @@ export async function deleteSession(sessionId: string): Promise<boolean> {
  */
 export async function addMessageToSession(
   sessionId: string,
-  message: Omit<SessionMessage, 'timestamp'>
+  message: Omit<SessionMessage, "timestamp">,
 ): Promise<Session | null> {
   const session = await getSession(sessionId);
 
@@ -205,7 +209,7 @@ export async function addMessageToSession(
 export async function setPendingAction(
   sessionId: string,
   type: PendingActionType,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ): Promise<Session | null> {
   const pendingAction: PendingAction = {
     type,
@@ -215,17 +219,19 @@ export async function setPendingAction(
 
   return updateSession(sessionId, {
     pendingAction,
-    status: 'pending_confirmation',
+    status: "pending_confirmation",
   });
 }
 
 /**
  * Clear the pending action from a session.
  */
-export async function clearPendingAction(sessionId: string): Promise<Session | null> {
+export async function clearPendingAction(
+  sessionId: string,
+): Promise<Session | null> {
   return updateSession(sessionId, {
     pendingAction: null,
-    status: 'active',
+    status: "active",
   });
 }
 
@@ -234,7 +240,7 @@ export async function clearPendingAction(sessionId: string): Promise<Session | n
  */
 export async function setCurrentAction(
   sessionId: string,
-  action: CurrentActionType
+  action: CurrentActionType,
 ): Promise<Session | null> {
   return updateSession(sessionId, {
     currentAction: action,
@@ -244,10 +250,12 @@ export async function setCurrentAction(
 /**
  * Mark a session as completed.
  */
-export async function completeSession(sessionId: string): Promise<Session | null> {
+export async function completeSession(
+  sessionId: string,
+): Promise<Session | null> {
   return updateSession(sessionId, {
-    status: 'completed',
-    currentAction: 'idle',
+    status: "completed",
+    currentAction: "idle",
     pendingAction: null,
   });
 }
@@ -255,10 +263,12 @@ export async function completeSession(sessionId: string): Promise<Session | null
 /**
  * Mark a session as cancelled.
  */
-export async function cancelSession(sessionId: string): Promise<Session | null> {
+export async function cancelSession(
+  sessionId: string,
+): Promise<Session | null> {
   return updateSession(sessionId, {
-    status: 'cancelled',
-    currentAction: 'idle',
+    status: "cancelled",
+    currentAction: "idle",
     pendingAction: null,
   });
 }
@@ -270,7 +280,7 @@ export async function cancelSession(sessionId: string): Promise<Session | null> 
 export async function getOrCreateSession(
   sessionId: string,
   userId: string,
-  threadId: string
+  threadId: string,
 ): Promise<Session> {
   const existing = await getSession(sessionId);
 
@@ -286,11 +296,9 @@ export async function getOrCreateSession(
  * Useful for keeping sessions alive during long operations.
  */
 export async function refreshSessionTTL(sessionId: string): Promise<boolean> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
 
-  const result = await redis.expire(key, SESSION_TTL_SECONDS);
-
+  const result = await client.expire(key, SESSION_TTL_SECONDS);
   return result === 1;
 }
 
@@ -299,8 +307,7 @@ export async function refreshSessionTTL(sessionId: string): Promise<boolean> {
  * Returns -2 if session doesn't exist, -1 if no TTL is set.
  */
 export async function getSessionTTL(sessionId: string): Promise<number> {
-  const redis = getRedisClient();
   const key = getSessionKey(sessionId);
 
-  return redis.ttl(key);
+  return client.ttl(key);
 }

@@ -3,7 +3,7 @@ export {
   getRedisClient,
   closeRedisConnection,
   isRedisReady,
-  Redis,
+  initRedis,
 } from './redisClient';
 
 // Session store exports

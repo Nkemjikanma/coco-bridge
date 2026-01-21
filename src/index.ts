@@ -7,9 +7,18 @@
  * @module index
  */
 
-import { createCocoBridgeBot, type CocoBridgeBotOptions, type Bot } from './bot';
-import { getRedisClient, closeRedisConnection, isRedisReady } from './db/redisClient';
-import { BOT_COMMANDS } from './commands';
+import {
+  type Bot,
+  type CocoBridgeBotOptions,
+  createCocoBridgeBot,
+} from "./bot";
+import { BOT_COMMANDS } from "./commands";
+import {
+  closeRedisConnection,
+  getRedisClient,
+  initRedis,
+  isRedisReady,
+} from "./db/redisClient";
 
 // ============================================================================
 // Environment Configuration
@@ -28,23 +37,25 @@ interface EnvConfig {
  * Throws if required variables are missing.
  */
 function loadEnvConfig(): EnvConfig {
-  const botPrivateKey = process.env.BOT_PRIVATE_KEY;
+  const botPrivateKey = process.env.APP_PRIVATE_DATA;
   const jwtSecret = process.env.JWT_SECRET;
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  const port = parseInt(process.env.PORT || '3000', 10);
+  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  const port = parseInt(process.env.PORT || "3000", 10);
   const baseRpcUrl = process.env.BASE_RPC_URL;
 
   const missing: string[] = [];
 
   if (!botPrivateKey) {
-    missing.push('BOT_PRIVATE_KEY');
+    missing.push("BOT_PRIVATE_KEY");
   }
   if (!jwtSecret) {
-    missing.push('JWT_SECRET');
+    missing.push("JWT_SECRET");
   }
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    throw new Error(
+      `Missing required environment variables: ${missing.join(", ")}`,
+    );
   }
 
   return {
@@ -60,21 +71,25 @@ function loadEnvConfig(): EnvConfig {
 // Logging
 // ============================================================================
 
-type LogLevel = 'info' | 'warn' | 'error';
+type LogLevel = "info" | "warn" | "error";
 
-function log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
+function log(
+  level: LogLevel,
+  message: string,
+  data?: Record<string, unknown>,
+): void {
   const timestamp = new Date().toISOString();
   const logEntry = { timestamp, level, message, ...data };
   const logString = JSON.stringify(logEntry);
 
   switch (level) {
-    case 'info':
+    case "info":
       console.info(logString);
       break;
-    case 'warn':
+    case "warn":
       console.warn(logString);
       break;
-    case 'error':
+    case "error":
       console.error(logString);
       break;
   }
@@ -105,22 +120,22 @@ let isShuttingDown = false;
  */
 async function shutdown(signal: string): Promise<void> {
   if (isShuttingDown) {
-    log('warn', 'Shutdown already in progress');
+    log("warn", "Shutdown already in progress");
     return;
   }
 
   isShuttingDown = true;
-  log('info', `Received ${signal}, starting graceful shutdown`);
+  log("info", `Received ${signal}, starting graceful shutdown`);
 
   try {
     // Close Redis connection
-    log('info', 'Closing Redis connection');
+    log("info", "Closing Redis connection");
     await closeRedisConnection();
 
-    log('info', 'Shutdown completed successfully');
+    log("info", "Shutdown completed successfully");
     process.exit(0);
   } catch (error) {
-    log('error', 'Error during shutdown', {
+    log("error", "Error during shutdown", {
       error: error instanceof Error ? error.message : String(error),
     });
     process.exit(1);
@@ -131,22 +146,22 @@ async function shutdown(signal: string): Promise<void> {
  * Register shutdown handlers for graceful termination.
  */
 function registerShutdownHandlers(): void {
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 
-  process.on('uncaughtException', (error) => {
-    log('error', 'Uncaught exception', {
+  process.on("uncaughtException", (error) => {
+    log("error", "Uncaught exception", {
       error: error.message,
       stack: error.stack,
     });
-    shutdown('uncaughtException');
+    shutdown("uncaughtException");
   });
 
-  process.on('unhandledRejection', (reason) => {
-    log('error', 'Unhandled rejection', {
+  process.on("unhandledRejection", (reason) => {
+    log("error", "Unhandled rejection", {
       reason: reason instanceof Error ? reason.message : String(reason),
     });
-    shutdown('unhandledRejection');
+    shutdown("unhandledRejection");
   });
 }
 
@@ -158,9 +173,9 @@ function registerShutdownHandlers(): void {
  * Initialize Redis connection and verify it's ready.
  */
 async function initializeRedis(): Promise<void> {
-  log('info', 'Initializing Redis connection');
+  log("info", "Initializing Redis connection");
 
-  const client = getRedisClient();
+  await initRedis();
 
   // Wait for connection with timeout
   const timeout = 10000; // 10 seconds
@@ -171,19 +186,20 @@ async function initializeRedis(): Promise<void> {
   }
 
   if (!isRedisReady()) {
-    throw new Error('Redis connection timeout');
+    throw new Error("Redis connection timeout");
   }
 
   // Verify connection with a ping
+  const client = getRedisClient();
   await client.ping();
-  log('info', 'Redis connection established');
+  log("info", "Redis connection established");
 }
 
 /**
  * Initialize and start the Coco Bridge bot.
  */
 async function startBot(config: EnvConfig): Promise<Bot<typeof BOT_COMMANDS>> {
-  log('info', 'Creating Coco Bridge bot');
+  log("info", "Creating Coco Bridge bot");
 
   const options: CocoBridgeBotOptions = {
     appPrivateKey: config.botPrivateKey,
@@ -193,12 +209,12 @@ async function startBot(config: EnvConfig): Promise<Bot<typeof BOT_COMMANDS>> {
 
   const bot = await createCocoBridgeBot(options);
 
-  log('info', 'Starting bot server', { port: config.port });
+  log("info", "Starting bot server", { port: config.port });
 
   // Start the bot's Hono server
   bot.start();
 
-  log('info', 'Coco Bridge bot started successfully', {
+  log("info", "Coco Bridge bot started successfully", {
     port: config.port,
     commands: BOT_COMMANDS.map((c) => `/${c.name}`),
   });
@@ -214,14 +230,14 @@ async function startBot(config: EnvConfig): Promise<Bot<typeof BOT_COMMANDS>> {
  * Main function to initialize and start the Coco Bridge bot.
  */
 async function main(): Promise<void> {
-  log('info', 'Starting Coco Bridge');
+  log("info", "Starting Coco Bridge");
 
   try {
     // Load environment configuration
     const config = loadEnvConfig();
-    log('info', 'Environment configuration loaded', {
+    log("info", "Environment configuration loaded", {
       port: config.port,
-      redisUrl: config.redisUrl.replace(/\/\/.*@/, '//*****@'), // Mask credentials
+      redisUrl: config.redisUrl.replace(/\/\/.*@/, "//*****@"), // Mask credentials
       hasBaseRpcUrl: !!config.baseRpcUrl,
     });
 
@@ -234,9 +250,9 @@ async function main(): Promise<void> {
     // Start the bot
     botInstance = await startBot(config);
 
-    log('info', 'Coco Bridge is running');
+    log("info", "Coco Bridge is running");
   } catch (error) {
-    log('error', 'Failed to start Coco Bridge', {
+    log("error", "Failed to start Coco Bridge", {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
@@ -252,6 +268,10 @@ main();
 // ============================================================================
 
 // Re-export from modules for external access
-export * from './ai';
-export * from './bot';
-export { getRedisClient, closeRedisConnection, isRedisReady } from './db/redisClient';
+export * from "./ai";
+export * from "./bot";
+export {
+  closeRedisConnection,
+  getRedisClient,
+  isRedisReady,
+} from "./db/redisClient";
